@@ -29,6 +29,13 @@ bool PluginProcessor::acceptsMidi() const { return true; }
 bool PluginProcessor::producesMidi() const { return true; }
 double PluginProcessor::getTailLengthSeconds() const { return 0.0; }
 
+int PluginProcessor::getCurrentBpm() const
+{
+    static const int bpms[] = { 60, 70, 80, 90, 100 };
+    auto idx = juce::jlimit(0, 4, currentBpmIndex);
+    return bpms[idx];
+}
+
 int PluginProcessor::getNumPrograms() { return 1; }
 int PluginProcessor::getCurrentProgram() { return 0; }
 void PluginProcessor::setCurrentProgram(int) {}
@@ -38,10 +45,10 @@ void PluginProcessor::changeProgramName(int, const juce::String&) {}
 void PluginProcessor::getStateInformation(juce::MemoryBlock&) {}
 void PluginProcessor::setStateInformation(const void*, int) {}
 
-juce::File PluginProcessor::generateMidiFile(int genreIndex)
+juce::File PluginProcessor::generateMidiFile(int genreIndex, int bpm)
 {
     auto seed = juce::Time::getMillisecondCounter();
-    auto midi = MidiGenerator::generateMidi(genreIndex, seed);
+    auto midi = MidiGenerator::generateMidi(genreIndex, bpm, seed);
     tempFile = std::make_unique<juce::TemporaryFile>(".mid");
     juce::FileOutputStream out(tempFile->getFile());
     if (out.openedOk())

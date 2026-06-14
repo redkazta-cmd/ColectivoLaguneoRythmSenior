@@ -1,35 +1,53 @@
 #include "MidiGenerator.h"
 
-juce::MidiFile MidiGenerator::generateMidi(int genreIndex, juce::int64 seed)
+namespace
+{
+    constexpr int ppq = 480;
+    constexpr int barTicks = ppq * 4;
+
+    // Escalas en notas MIDI (C4 = 60)
+    const int pentatonicMajor[] = { 48, 50, 52, 55, 57, 60, 62, 64, 67, 69, 72, 74 };
+    const int majorScale[]      = { 48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72 };
+    const int minorScale[]      = { 48, 50, 51, 53, 55, 56, 58, 60, 62, 63, 65, 67, 68, 70, 72 };
+}
+
+juce::MidiFile MidiGenerator::generateMidi(int genreIndex, int bpm, juce::int64 seed)
 {
     juce::MidiFile midi;
-    midi.setTicksPerQuarterNote(480);
+    midi.setTicksPerQuarterNote(ppq);
 
     juce::Random rng(seed);
 
-    juce::MidiMessageSequence kickSeq, snareSeq, hihatSeq, bassSeq, percSeq;
+    // Formato 0: todo en un solo track
+    juce::MidiMessageSequence seq;
 
-    // Nombres de pista mediante meta‑eventos de texto (tipo 3)
-    kickSeq.addEvent(juce::MidiMessage::textMetaEvent(3, "Kick"), 0);
-    snareSeq.addEvent(juce::MidiMessage::textMetaEvent(3, "Snare"), 0);
-    hihatSeq.addEvent(juce::MidiMessage::textMetaEvent(3, "HiHat"), 0);
-    bassSeq.addEvent(juce::MidiMessage::textMetaEvent(3, "808"), 0);
-    percSeq.addEvent(juce::MidiMessage::textMetaEvent(3, "Percussion"), 0);
+    // Meta-evento de tempo al inicio (microsegundos por pulso)
+    int usPerQuarter = 60000000 / juce::jlimit(1, 300, bpm);
+    seq.addEvent(juce::MidiMessage::tempoMetaEvent(usPerQuarter), 0);
+
+    // Nombre de pista
+    juce::String trackName;
+    switch (genreIndex)
+    {
+        case 0: trackName = "Yoga Ambient"; break;
+        case 1: trackName = "Meditation"; break;
+        case 2: trackName = "Deep Sleep"; break;
+        default: trackName = "Ambient"; break;
+    }
+    seq.addEvent(juce::MidiMessage::textMetaEvent(3, trackName), 0);
+
+    const int bars = 24; // duración relajada
 
     switch (genreIndex)
     {
-        case 0: generateTrap(kickSeq, snareSeq, hihatSeq, bassSeq, rng); break;
-        case 1: generateCrank(kickSeq, snareSeq, hihatSeq, bassSeq, rng); break;
-        case 2: generateReggaeton(kickSeq, snareSeq, hihatSeq, bassSeq, rng); break;
-        case 3: generateBoomBap(kickSeq, snareSeq, hihatSeq, bassSeq, rng); break;
+        case 0: generateYogaAmbient(seq, bars, rng); break;
+        case 1: generateMeditation(seq, bars, rng); break;
+        case 2: generateDeepSleep(seq, bars, rng); break;
         default: break;
     }
 
-    midi.addTrack(kickSeq);
-    midi.addTrack(snareSeq);
-    midi.addTrack(hihatSeq);
-    midi.addTrack(bassSeq);
-    midi.addTrack(percSeq);
+    seq.updateMatchedPairs();
+    midi.addTrack(seq);
 
     return midi;
 }
@@ -38,124 +56,84 @@ void MidiGenerator::addNote(juce::MidiMessageSequence& seq, int channel, int not
                             int startTick, int durationTicks, float baseVelocity, juce::Random& rng)
 {
     auto vel = static_cast<juce::uint8>(juce::jlimit(1, 127,
-        static_cast<int>(baseVelocity * 127.0f * (rng.nextFloat() * 0.15f + 0.85f))));
+        static_cast<int>(baseVelocity * 127.0f * (rng.nextFloat() * 0.1f + 0.9f))));
     seq.addEvent(juce::MidiMessage::noteOn(channel, note, vel), startTick);
     seq.addEvent(juce::MidiMessage::noteOff(channel, note, vel), startTick + durationTicks);
 }
 
-// --------------- TRAP ---------------
-void MidiGenerator::generateTrap(juce::MidiMessageSequence& kick, juce::MidiMessageSequence& snare,
-                                 juce::MidiMessageSequence& hihat, juce::MidiMessageSequence& bass, juce::Random& rng)
+// --------------- YOGA AMBIENT (Pentatónica Mayor, notas largas, espaciadas) ---------------
+void MidiGenerator::generateYogaAmbient(juce::MidiMessageSequence& seq, int bars, juce::Random& rng)
 {
-    const int barTicks = 1920;
-    for (int bar = 0; bar < 32; ++bar)
+    const int noteCount = sizeof(pentatonicMajor) / sizeof(pentatonicMajor[0]);
+    int currentTick = 0;
+
+    for (int bar = 0; bar < bars; ++bar)
     {
-        int offset = bar * barTicks;
-        addNote(kick, 10, 36, offset,         240, 1.0f, rng);
-        addNote(kick, 10, 36, offset + 1920,  240, 1.0f, rng);
-        addNote(kick, 10, 36, offset + 1440,  120, 0.7f, rng);
-        addNote(snare, 10, 38, offset + 960,   240, 1.0f, rng);
-        addNote(snare, 10, 38, offset + 2880,  240, 1.0f, rng);
-        for (int i = 0; i < 8; ++i)
+        // 1-2 notas por compás, largas (blancas o redondas)
+        int notesInBar = rng.nextBool() ? 1 : 2;
+        for (int n = 0; n < notesInBar; ++n)
         {
-            int t = offset + i * 480;
-            if (rng.nextFloat() < 0.15f)
-                for (int j = 0; j < 4; ++j)
-                    addNote(hihat, 10, 42, t + j * 120, 60, 1.0f, rng);
-            else
-                addNote(hihat, 10, 42, t, 240, 1.0f, rng);
+            int noteIdx = rng.nextInt(noteCount);
+            int note = pentatonicMajor[noteIdx];
+            int duration = (rng.nextFloat() < 0.6f) ? (ppq * 2) : (ppq * 4); // blanca o redonda
+            float vel = rng.nextFloat() * 0.3f + 0.5f; // suave 0.5-0.8
+
+            addNote(seq, 1, note, currentTick, duration, vel, rng);
+            currentTick += duration + (rng.nextInt(3) * ppq); // pequeña pausa aleatoria
         }
-        bool latigazo = (bar % 2 == 0) && (rng.nextFloat() < 0.4f);
-        if (!latigazo)
-        {
-            addNote(bass, 3, 48, offset,         1920, 1.0f, rng);
-            addNote(bass, 3, 48, offset + 1920,  1920, 1.0f, rng);
-        }
-        else
-        {
-            addNote(bass, 3, 48, offset,         1920, 1.0f, rng);
-            addNote(bass, 3, 60, offset + 1920,  1920, 1.0f, rng);
-            addNote(kick, 10, 36, offset + 1920,  120, 1.0f, rng);
-        }
+
+        // Asegurar avance mínimo de un compás
+        if (currentTick < (bar + 1) * barTicks)
+            currentTick = (bar + 1) * barTicks;
     }
 }
 
-// --------------- CRANK ---------------
-void MidiGenerator::generateCrank(juce::MidiMessageSequence& kick, juce::MidiMessageSequence& snare,
-                                  juce::MidiMessageSequence& hihat, juce::MidiMessageSequence& bass, juce::Random& rng)
+// --------------- MEDITATION (Mayor Natural, movimientos suaves, sustain) ---------------
+void MidiGenerator::generateMeditation(juce::MidiMessageSequence& seq, int bars, juce::Random& rng)
 {
-    const int barTicks = 1920;
-    for (int bar = 0; bar < 32; ++bar)
+    const int noteCount = sizeof(majorScale) / sizeof(majorScale[0]);
+    int currentTick = 0;
+    int prevNote = 60;
+
+    for (int bar = 0; bar < bars; ++bar)
     {
-        int offset = bar * barTicks;
-        for (int i = 0; i < 8; ++i)
-        {
-            float vel = (i == 0 || i == 4) ? 1.0f : 0.8f;
-            addNote(kick, 10, 36, offset + i * 480, 240, vel, rng);
-        }
-        addNote(snare, 10, 38, offset + 960,   240, 1.0f, rng);
-        addNote(snare, 10, 38, offset + 2880,  240, 1.0f, rng);
-        for (int step = 0; step < 16; ++step)
-        {
-            int t = offset + step * 240;
-            if (rng.nextFloat() < 0.3f)
-                for (int j = 0; j < 16; ++j)
-                    addNote(hihat, 10, 42, t + j * 30, 15, 1.0f, rng);
-            else
-                addNote(hihat, 10, 42, t, 120, 1.0f, rng);
-        }
-        for (int beat = 0; beat < 4; ++beat)
-        {
-            int note = (beat % 2 == 0) ? 48 : 60;
-            addNote(bass, 3, note, offset + beat * 480, 480, 1.0f, rng);
-        }
+        // 1 nota por compás, muy larga, con transiciones suaves de ±2-3 semitonos
+        int delta = rng.nextInt(7) - 3; // -3 a +3
+        int prevIdx = 0;
+        for (int i = 0; i < noteCount; ++i)
+            if (majorScale[i] == prevNote) { prevIdx = i; break; }
+        int idx = juce::jlimit(0, noteCount - 1, prevIdx + delta);
+        if (idx < 0 || idx >= noteCount)
+            idx = rng.nextInt(noteCount);
+
+        int note = majorScale[idx];
+        int duration = (rng.nextFloat() < 0.7f) ? (ppq * 4) : (ppq * 6); // redonda o redonda con puntillo
+        float vel = rng.nextFloat() * 0.2f + 0.55f;
+
+        addNote(seq, 1, note, currentTick, duration, vel, rng);
+        prevNote = note;
+        currentTick += barTicks;
     }
 }
 
-// --------------- REGGAETÓN ---------------
-void MidiGenerator::generateReggaeton(juce::MidiMessageSequence& kick, juce::MidiMessageSequence& snare,
-                                     juce::MidiMessageSequence& hihat, juce::MidiMessageSequence& bass, juce::Random& rng)
+// --------------- DEEP SLEEP (Menor Natural, bajas frecuencias, notas larguísimas) ---------------
+void MidiGenerator::generateDeepSleep(juce::MidiMessageSequence& seq, int bars, juce::Random& rng)
 {
-    const int barTicks = 1920;
-    for (int bar = 0; bar < 32; ++bar)
+    const int noteCount = sizeof(minorScale) / sizeof(minorScale[0]);
+    int currentTick = 0;
+
+    for (int bar = 0; bar < bars; ++bar)
     {
-        int offset = bar * barTicks;
-        addNote(kick, 10, 36, offset,         240, 1.0f, rng);
-        addNote(kick, 10, 36, offset + 1920,  240, 1.0f, rng);
-        addNote(kick, 10, 36, offset + 1440,  120, 0.6f, rng);
-        addNote(kick, 10, 36, offset + 3360,  120, 0.6f, rng);
-        addNote(snare, 10, 38, offset + 960,   240, 1.0f, rng);
-        addNote(snare, 10, 38, offset + 2880,  240, 1.0f, rng);
-        for (int step = 0; step < 16; ++step)
-            addNote(hihat, 10, 42, offset + step * 240, 120, 1.0f, rng);
+        // 1 nota cada 2 compases
         if (bar % 2 == 0)
         {
-            addNote(bass, 3, 48, offset,        480, 1.0f, rng);
-            addNote(bass, 3, 51, offset + 480,  240, 1.0f, rng);
-            addNote(bass, 3, 48, offset + 960,  480, 1.0f, rng);
-            addNote(bass, 3, 51, offset + 2400, 240, 1.0f, rng);
-            addNote(bass, 3, 48, offset + 2880, 480, 1.0f, rng);
-        }
-    }
-}
+            int noteIdx = rng.nextInt(noteCount);
+            int note = minorScale[noteIdx];
+            int duration = barTicks * 2 - ppq; // casi 2 compases de sustain
+            float vel = rng.nextFloat() * 0.15f + 0.4f; // muy suave
 
-// --------------- BOOM BAP ---------------
-void MidiGenerator::generateBoomBap(juce::MidiMessageSequence& kick, juce::MidiMessageSequence& snare,
-                                    juce::MidiMessageSequence& hihat, juce::MidiMessageSequence& bass, juce::Random& rng)
-{
-    const int barTicks = 1920;
-    for (int bar = 0; bar < 32; ++bar)
-    {
-        int offset = bar * barTicks;
-        addNote(kick, 10, 36, offset,         240, 1.0f, rng);
-        addNote(kick, 10, 36, offset + 1440,  120, 0.7f, rng);
-        addNote(kick, 10, 36, offset + 1920,  240, 1.0f, rng);
-        addNote(kick, 10, 36, offset + 3360,  120, 0.7f, rng);
-        addNote(snare, 10, 38, offset + 960,   240, 1.0f, rng);
-        addNote(snare, 10, 38, offset + 2880,  240, 1.0f, rng);
-        for (int i = 0; i < 8; ++i)
-            addNote(hihat, 10, 42, offset + i * 480, 240, 1.0f, rng);
-        if (bar % 2 == 0)
-            addNote(bass, 3, 48, offset, 3840, 1.0f, rng);
+            addNote(seq, 1, note, currentTick, duration, vel, rng);
+        }
+        currentTick += barTicks;
     }
 }

@@ -31,10 +31,15 @@ public:
     int getCurrentGenreIndex() const { return currentGenreIndex; }
     void setCurrentGenreIndex(int index) { currentGenreIndex = index; }
 
-    juce::File generateMidiFile(int genreIndex);
+    int getCurrentBpmIndex() const { return currentBpmIndex; }
+    void setCurrentBpmIndex(int index) { currentBpmIndex = index; }
+    int getCurrentBpm() const;
+
+    juce::File generateMidiFile(int genreIndex, int bpm);
 
 private:
     int currentGenreIndex = 0;
+    int currentBpmIndex = 0;
     std::unique_ptr<juce::TemporaryFile> tempFile;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginProcessor)

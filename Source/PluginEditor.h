@@ -12,6 +12,7 @@ public:
 private:
     PluginProcessor& processor;
     juce::ComboBox genreSelector;
+    juce::ComboBox bpmSelector;
     juce::TextButton generateButton;
     DraggableMidiLabel dragArea;
     juce::LookAndFeel_V4 lookAndFeel;
